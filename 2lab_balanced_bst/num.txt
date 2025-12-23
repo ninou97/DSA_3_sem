@@ -1,0 +1,31 @@
+// Построение дерева по номерам вершин
+Node* NumericTree(int N_vertex, int n) {
+    if (N_vertex > n) return NULL;
+    
+    Node* root = createNode(N_vertex);
+    
+    if (2 * N_vertex <= n) {
+        root->left = NumericTree(2 * N_vertex, n);
+    }
+    if (2 * N_vertex + 1 <= n) {
+        root->right = NumericTree(2 * N_vertex + 1, n);
+    }
+    return root;
+}
+
+
+    // 2. NumericTree
+    printf("=== Дерево по номерам вершин ===\n");
+    Node* numRoot = NumericTree(1, N);
+    
+    printf("Обход слева направо: ");
+    inorder(numRoot);
+    printf("\n");
+    
+    printf("Размер: %d\n", size(numRoot));
+    printf("Сумма: %d\n", checksum(numRoot));
+    printf("Высота: %d\n", height(numRoot));
+    printf("Средняя высота: %.2f\n", avgDepth(numRoot));
+    
+    printf("\nГрафический вывод NumericTree:\n");
+    PrintTree(numRoot, 0); // Раскомментировал вывод
