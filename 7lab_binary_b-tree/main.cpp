@@ -144,6 +144,8 @@ DBDNode* insertDBD(DBDNode *p, int data) {
             VR = 0;
         } else if (HR == 1) {
             if (p->bal == 1) { // left rotation and go up
+                // Ситуация: У нас уже была горизонтальная связь, и снова рост вправо.
+                // Страница переполнена -> Сплит (Левый поворот).
                 q = p->right;
                 p->bal = 0;
                 q->bal = 0;

@@ -41,7 +41,7 @@ int compare_alpha(const void *a, const void *b) {
     return ((Symbol*)a)->symbol - ((Symbol*)b)->symbol;
 }
 
-// --- РАБОТА С ДЕРЕВОМ (ГРАФИКА) ---
+// --- ГРАФИКА ДЕРЕВА ---
 
 TrieNode* createTrieNode() {
     TrieNode* node = (TrieNode*)malloc(sizeof(TrieNode));
@@ -65,23 +65,14 @@ void insertTrie(TrieNode* root, Symbol* s) {
     curr->symbol = s->symbol;
 }
 
-// Рекурсивный вывод дерева в нужном стиле
 void printTrieRecursive(TrieNode* node, int level, int isRight) {
     if (!node) return;
-
-    // Сначала правое поддерево (верхняя часть)
     printTrieRecursive(node->right, level + 1, 1);
-
-    // Отступ
     for (int i = 0; i < level; i++) wprintf(L"     ");
-
-    // Ветвь
     if (level > 0) {
         if (isRight) wprintf(L"/---- ");
         else         wprintf(L"\\---- ");
     }
-
-    // Узел
     if (node->is_leaf) {
         if (node->symbol == L'\n') wprintf(L"(\\n)\n");
         else if (node->symbol == L' ') wprintf(L"(sp)\n");
@@ -89,8 +80,6 @@ void printTrieRecursive(TrieNode* node, int level, int isRight) {
     } else {
         wprintf(L"*\n");
     }
-
-    // Левое поддерево (нижняя часть)
     printTrieRecursive(node->left, level + 1, 0);
 }
 
@@ -101,10 +90,8 @@ void freeTrie(TrieNode* node) {
     free(node);
 }
 
-// --- УНИВЕРСАЛЬНАЯ ФУНКЦИЯ ВЫВОДА РЕЗУЛЬТАТОВ ---
+// --- ВЫВОД РЕЗУЛЬТАТОВ ---
 void print_full_report(Symbol symbols[], int n, wchar_t* source_text, int text_len, long double entropy, const wchar_t* alg_name) {
-    
-    // 1. ТАБЛИЦА
     wprintf(L"\n======================= Код %ls (Таблица) =======================\n", alg_name);
     wprintf(L"%-8ls %-10ls %-12ls %-8ls %-20ls\n", L"Символ", L"Частота", L"Вероятность", L"Длина", L"Кодовое слово");
     wprintf(L"--------------------------------------------------------------------\n");
@@ -119,9 +106,8 @@ void print_full_report(Symbol symbols[], int n, wchar_t* source_text, int text_l
                 display_sym, symbols[i].freq, symbols[i].prob, symbols[i].code_len, symbols[i].code);
     }
 
-    // 2. ХАРАКТЕРИСТИКИ
     long double kraft = 0;
-    long double L_avg = 0; // average length of code
+    long double L_avg = 0;
     for (int i = 0; i < n; i++) {
         kraft += powl(2.0L, -symbols[i].code_len);
         L_avg += symbols[i].prob * symbols[i].code_len;
@@ -134,16 +120,7 @@ void print_full_report(Symbol symbols[], int n, wchar_t* source_text, int text_l
     if (kraft <= 1.000001) wprintf(L"Результат: Неравенство Крафта выполняется (<= 1).\n");
     else wprintf(L"Результат: Неравенство Крафта НЕ выполняется (%.6Lf > 1).\n", kraft);
 
-    // 3. КОДИРОВАНИЕ
-    wprintf(L"\n======================= Кодирование текста (100 символов) =======================\n");
-    wprintf(L"Исходный текст: \"");
-    for(int i=0; i<text_len; i++) {
-        if(source_text[i] == L'\n') wprintf(L" ");
-        else wprintf(L"%lc", source_text[i]);
-    }
-    wprintf(L"\"\n\n");
-
-    wprintf(L"Закодированная последовательность:\n");
+    wprintf(L"\nЗакодированная последовательность (первые 100 символов исходного):\n");
     long long encoded_bits = 0;
     for (int i = 0; i < text_len; i++) {
         for (int j = 0; j < n; j++) {
@@ -156,41 +133,29 @@ void print_full_report(Symbol symbols[], int n, wchar_t* source_text, int text_l
     }
     wprintf(L"\n\n");
     
-    long long original_bits = text_len * 8;
-    wprintf(L"Статистика сжатия:\n");
-    wprintf(L"Длина исходного текста: %lld бит (считая 8 бит/символ)\n", original_bits);
-    wprintf(L"Длина закодированного:  %lld бит\n", encoded_bits);
-    wprintf(L"Коэффициент сжатия:     %.2f раза\n", (double)original_bits / encoded_bits);
-
-    // 4. ДЕРЕВО
-    wprintf(L"\n======================= Кодовое дерево (Задание 5*) =======================\n");
-    wprintf(L"(Повернуто влево: Корень слева, 0 - вниз/влево, 1 - вверх/вправо)\n\n");
-    
     TrieNode* root = createTrieNode();
     for(int i=0; i<n; i++) insertTrie(root, &symbols[i]);
-    
-    // Вывод всего дерева без ограничений
-    printTrieRecursive(root, 0, 0); 
-    
+    // printTrieRecursive(root, 0, 0); 
     freeTrie(root);
     wprintf(L"\n\n");
 }
-
 
 // === АЛГОРИТМЫ КОДИРОВАНИЯ ===
 
 // 1. ШЕННОН
 void shannon_coding(Symbol symbols[], int n) {
-    double P[MAX_SYMBOLS], Q[MAX_SYMBOLS]; // Q - cumilative frequency of symbols up until that symbol, P - probabilities of symbols
+    double Q[MAX_SYMBOLS]; // Кумулятивная вероятность (нарастающая сумма)
     Q[0] = 0.0;
+    // 2. Составим нарастающие суммы Q (стр. 99)
     for (int i = 0; i < n; i++) {
-        P[i] = symbols[i].prob;
-        if (i > 0) Q[i] = Q[i-1] + P[i-1]; // next symbol starts where previous ended
+        if (i > 0) Q[i] = Q[i-1] + symbols[i-1].prob;
         
-        symbols[i].code_len = (int)ceil(-log2(P[i]));
+        // 3. Длина кодового слова
+        symbols[i].code_len = (int)ceil(-log2(symbols[i].prob));
         
+        // Перевод дробной части Q[i] в двоичный код
         double temp_Q = Q[i];
-        for (int j = 0; j < symbols[i].code_len; j++) { // mantissa into binary
+        for (int j = 0; j < symbols[i].code_len; j++) {
             temp_Q *= 2;
             int bit = (int)floor(temp_Q);
             symbols[i].code[j] = bit ? L'1' : L'0';
@@ -200,28 +165,35 @@ void shannon_coding(Symbol symbols[], int n) {
     }
 }
 
-// 2. ФАНО (A2)
-int MedA2(Symbol symbols[], int L, int R) {
-    long double wes = 0.0L;
-    for (int i = L; i <= R; i++) wes += symbols[i].prob;
-    long double half = wes / 2.0L;
-    long double summa = 0.0L;
+// 2. ФАНО
+
+// Находит медиану (индекс разбиения)
+int Med_PDF(Symbol symbols[], int L, int R) {
+    long double SL = 0.0;
+    // Сумма элементов первой части (предварительно от L до R-1)
     for (int i = L; i < R; i++) {
-        summa += symbols[i].prob;
-        if (summa >= half) {
-            long double diff_curr = fabsl(summa - half);
-            long double diff_prev = fabsl((summa - symbols[i].prob) - half);
-            if (diff_prev < diff_curr) return i - 1;
-            return i;
-        }
+        SL += symbols[i].prob;
     }
-    return R - 1; // just in case
+    
+    long double SR = symbols[R].prob; // Сумма второй части (пока только последний элемент)
+    int m = R;
+    
+    // Сдвигаем границу влево, пока левая часть больше или равна правой
+    while (SL >= SR) {
+        m = m - 1;
+        SL = SL - symbols[m].prob;
+        SR = SR + symbols[m].prob;
+    }
+    
+    return m;
 }
 
-void Fano_codingA2(Symbol symbols[], int L, int R, int k) {
+void Fano_coding(Symbol symbols[], int L, int R, int k) {
     if (L < R) {
-        int m = MedA2(symbols, L, R);
-        if (m < L) m = L; // needs to be at least L
+        // Деление массива вероятностей 
+        int m = Med_PDF(symbols, L, R);
+        
+        // Приписываем 0 первой части, 1 второй части
         for (int i = L; i <= R; i++) {
             if (i <= m) {
                 symbols[i].code[k] = L'0';
@@ -231,37 +203,44 @@ void Fano_codingA2(Symbol symbols[], int L, int R, int k) {
                 symbols[i].code_len++;
             }
         }
-        Fano_codingA2(symbols, L, m, k + 1);
-        Fano_codingA2(symbols, m + 1, R, k + 1);
+        Fano_coding(symbols, L, m, k + 1);
+        Fano_coding(symbols, m + 1, R, k + 1);
     } else if (L == R) {
         symbols[L].code[k] = L'\0';
     }
 }
 
-// 3. ХАФФМАН
-// compress array
+// 3. ХАФФМАН 
+
+// Функция Up (вставка суммы с сохранением порядка)
 int Up(int n, long double q, long double P[]) {
     int i = n - 1;
+    // Сдвигаем элементы вправо, освобождая место для q
     while (i >= 1 && P[i - 1] <= q) {
-        P[i] = P[i - 1]; // move elements to the right
+        P[i] = P[i - 1]; 
         i--;
     }
     P[i] = q;
-    return i; // return index where we inserted new probability q
+    return i;
 }
 
+// Функция Down (формирование кодов)
 void Down(int n, int j, wchar_t C[][MAX_CODE_LEN], int L[]) {
     wchar_t S[MAX_CODE_LEN];
     wcscpy(S, C[j]);
     int L_var = L[j];
-    for (int i = j; i < n - 1; i++) {  // move elements to the left until they reach the state before merging in "up"
+    
+    // Сдвиг вверх (восстановление пропущенных индексов)
+    for (int i = j; i < n - 1; i++) {
         wcscpy(C[i], C[i + 1]);
         L[i] = L[i + 1];
     }
-    // give last two elements code of it's parent
+    
+    // Восстановление префиксов для двух исходных элементов
     wcscpy(C[n - 2], S);
     wcscpy(C[n - 1], S);
-    // one gets suffix 0 and other suffix 1
+    
+    // Добавление 0 и 1
     int len = L_var;
     C[n - 2][len] = L'0'; C[n - 2][len+1] = L'\0';
     C[n - 1][len] = L'1'; C[n - 1][len+1] = L'\0';
@@ -269,43 +248,44 @@ void Down(int n, int j, wchar_t C[][MAX_CODE_LEN], int L[]) {
     L[n - 1] = len + 1;
 }
 
-// curling up until at the bottom you have 2 elements, and one of these element is a ball of 2 elements, whom you give 0 1, and you curl back outwards.
 void Huffman_Recursive(int n, long double P[], wchar_t C[][MAX_CODE_LEN], int L[]) {
     if (n == 2) {
+        // Базовый случай: два символа 0 и 1
         C[0][0] = L'0'; C[0][1] = L'\0'; L[0] = 1;
         C[1][0] = L'1'; C[1][1] = L'\0'; L[1] = 1;
     } else {
-        long double q = P[n - 2] + P[n - 1]; // combine last two elements
-        int j = Up(n - 1, q, P); // insert new q into highest place it can be and delete 2 last elements
-        // elements that are big only come at the end, so they have lower code
-        // Решаем задачу для уменьшенного массива
+        // Складываем две наименьшие вероятности (последние в отсортированном массиве)
+        long double q = P[n - 2] + P[n - 1]; 
+        int j = Up(n - 1, q, P); 
+        
         Huffman_Recursive(n - 1, P, C, L);
-        // take code for the sum and give it out to two original elements
+        
         Down(n, j, C, L);
     }
 }
 
-// 4. ГИЛБЕРТ-МУР
+// 4. ГИЛБЕРТ-МУР 
+// Алфавитный код
 void GilbertMoore(Symbol symbols[], int n) {
-    // P - вероятности символов
-    // Q - начало отрезка (как у Шеннона)
-    // Pr - середина отрезка (главное число Гилберта-Мура)
+    // P - вероятности, Q - кумулятивные суммы (нарастающие)
     double P[MAX_SYMBOLS], Q[MAX_SYMBOLS], Pr[MAX_SYMBOLS];
 
-    for(int i=0; i<n; i++) P[i] = symbols[i].prob; // fill probability array
+    for(int i=0; i<n; i++) P[i] = symbols[i].prob;
 
-    // Считаем Кумулятивную вероятность (Q) - point where in shannon code would start
+    // 1. Составим суммы Qi 
     Q[0] = 0.0;
     for(int i=1; i<=n; i++) {
         Q[i] = Q[i-1] + P[i-1];
     }
     
     for(int i=0; i<n; i++) {
-        Pr[i] = Q[i] + P[i]/2.0; // find middle of the range
+        // Середина интервала вероятности для i-го символа
+        Pr[i] = Q[i] + P[i]/2.0; 
 
-        symbols[i].code_len = (int)ceil(-log2(P[i])) + 1; // find length of code, +1 guarantee for since we take middle
+        // 3. Длина кода + 1
+        symbols[i].code_len = (int)ceil(-log2(P[i])) + 1; 
 
-        // mantiassa into binary
+        // Бинарное представление
         double temp = Pr[i];
         for(int j=0; j<symbols[i].code_len; j++) {
             temp *= 2;
@@ -324,20 +304,20 @@ int main(void) {
     
     FILE *f = fopen("text.txt", "r");
     if (!f) {
-        wprintf(L"Ошибка: Файл text.txt не найден.\n");
+        wprintf(L"Ошибка: Файл text.txt не найден. Создайте файл с текстом.\n");
         return 1;
     }
 
+    // Сбор статистики
     struct { wchar_t sym; long long freq; } freq_table[MAX_SYMBOLS];
-    int freq_count = 0; // number of characters
+    int freq_count = 0;
     long long total_symbols = 0;
     wchar_t source_text[105];
-    int text_captured = 0; // cursor
+    int text_captured = 0;
     wint_t c;
 
-    // Чтение и анализ файла
     while ((c = fgetwc(f)) != WEOF) {
-        if (c < 32 && c != L'\n') continue;
+        if (c < 32 && c != L'\n') continue; // Пропуск управляющих символов кроме переноса
         total_symbols++;
         if (text_captured < 100) source_text[text_captured++] = c;
 
@@ -371,11 +351,12 @@ int main(void) {
         entropy -= base[i].prob * log2l(base[i].prob);
     }
 
-    // Сортировки
+    // Подготовка массивов (сортировка по вероятности для всех кроме Гилберта-Мура)
     Symbol prob_sorted[MAX_SYMBOLS];
     memcpy(prob_sorted, base, sizeof(Symbol) * freq_count);
     qsort(prob_sorted, freq_count, sizeof(Symbol), compare_prob);
 
+    // Сортировка по алфавиту для Гилберта-Мура
     Symbol alpha_sorted[MAX_SYMBOLS];
     memcpy(alpha_sorted, base, sizeof(Symbol) * freq_count);
     qsort(alpha_sorted, freq_count, sizeof(Symbol), compare_alpha);
@@ -389,8 +370,8 @@ int main(void) {
     // --- 2. ФАНО ---
     Symbol fano[MAX_SYMBOLS];
     memcpy(fano, prob_sorted, sizeof(Symbol) * freq_count);
-    Fano_codingA2(fano, 0, freq_count - 1, 0);
-    print_full_report(fano, freq_count, source_text, text_captured, entropy, L"Фано (А2)");
+    Fano_coding(fano, 0, freq_count - 1, 0); // Используем обновленный Med_PDF внутри
+    print_full_report(fano, freq_count, source_text, text_captured, entropy, L"Фано");
 
     // --- 3. ХАФФМАН ---
     Symbol huff[MAX_SYMBOLS];
@@ -409,11 +390,11 @@ int main(void) {
     print_full_report(huff, freq_count, source_text, text_captured, entropy, L"Хаффмана");
 
     // --- 4. ГИЛБЕРТ-МУР ---
-    // Генерируем по алфавиту
     Symbol gm[MAX_SYMBOLS];
     memcpy(gm, alpha_sorted, sizeof(Symbol) * freq_count);
     GilbertMoore(gm, freq_count);
     
+    // Для красивого вывода сортируем результат Гилберта-Мура по убыванию вероятности (как остальные)
     Symbol gm_display[MAX_SYMBOLS];
     memcpy(gm_display, gm, sizeof(Symbol) * freq_count);
     qsort(gm_display, freq_count, sizeof(Symbol), compare_prob);

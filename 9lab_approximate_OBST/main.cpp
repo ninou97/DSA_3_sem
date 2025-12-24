@@ -78,56 +78,85 @@ void freeTree(Node* root) {
 // --- 1. ТОЧНЫЙ АЛГОРИТМ (ДОП / OBST) ---
 // Нужен для сравнения в таблице
 
-int AW[N+1][N+1];
-int AP[N+1][N+1];
-int R[N+1][N+1];
+int AW[N+1][N+1]; 
+int AP[N+1][N+1]; 
+int R[N+1][N+1];  
 
-// Вспомогательная для восстановления дерева из матрицы R
-Node* buildTreeFromR(int keys[], int weights[], int i, int j) {
-    if (i > j) return NULL;
-    int rootIdx = R[i][j];
-    Node* root = createNode(keys[rootIdx], weights[rootIdx]);
-    root->left = buildTreeFromR(keys, weights, i, rootIdx - 1);
-    root->right = buildTreeFromR(keys, weights, rootIdx + 1, j);
-    return root;
-}
-
-Node* buildOptimalBST(int keys[], int weights[], int n) {
-    // Инициализация
+void calculateOptimalBSTMatrix(int weights[], int n) {
     for (int i = 0; i <= n; i++) {
         for (int j = 0; j <= n; j++) {
-            AW[i][j] = AP[i][j] = R[i][j] = 0;
+            AW[i][j] = 0;
+            AP[i][j] = 0;
+            R[i][j] = 0;
         }
-    }
-    for (int i = 0; i < n; i++) {
-        AW[i][i] = AP[i][i] = weights[i];
-        R[i][i] = i;
     }
 
-    // Расчет матриц
-    for (int L = 2; L <= n; L++) {
-        for (int i = 0; i <= n - L; i++) {
-            int j = i + L - 1;
-            AW[i][j] = AW[i][j-1] + weights[j];
-            
-            int minCost = INT_MAX;
-            int bestRoot = -1;
-            
-            // Оптимизация Кнута: ищем k только между R[i][j-1] и R[i+1][j]
-            // Но для простоты оставим полный перебор, для N=100 это быстро
-            for (int k = i; k <= j; k++) {
-                int c = ((k > i) ? AP[i][k-1] : 0) + 
-                        ((k < j) ? AP[k+1][j] : 0);
-                if (c < minCost) {
-                    minCost = c;
-                    bestRoot = k;
-                }
-            }
-            AP[i][j] = minCost + AW[i][j];
-            R[i][j] = bestRoot;
+    // 2. Вычисление матрицы весов AW
+    // weights в C идут с 0, поэтому weights[j-1]
+    for (int i = 0; i <= n; i++) {
+        for (int j = i + 1; j <= n; j++) {
+            AW[i][j] = AW[i][j-1] + weights[j-1];
         }
     }
-    return buildTreeFromR(keys, weights, 0, n - 1);
+
+    
+    // Инициализация диагоналей (h=1)
+    for (int i = 0; i < n; i++) {
+        int j = i + 1;
+        AP[i][j] = AW[i][j];
+        R[i][j] = j;
+    }
+
+    // Основной цикл по длине поддерева h
+    for (int h = 2; h <= n; h++) {
+        for (int i = 0; i <= n - h; i++) {
+            int j = i + h;
+            
+            // m - начало диапазона поиска корня
+            // Используем R[i][j-1] как нижнюю границу
+            int m = R[i][j-1];
+            
+            // Предел поиска - R[i+1][j]
+            int limit = R[i+1][j];
+
+            // Здесь k выступает в роли кандидата на корень
+            
+            // Начальное значение минимума берем для k = m
+            int minVal = AP[i][m-1] + AP[m][j];
+            int bestK = m;
+
+            // Цикл поиска k 
+            for (int k = m + 1; k <= limit; k++) {
+                int x = AP[i][k-1] + AP[k][j];
+                if (x < minVal) {
+                    minVal = x;
+                    bestK = k; // запоминаем индекс
+                }
+            }
+
+            // Запись результатов
+            AP[i][j] = minVal + AW[i][j];
+            R[i][j] = bestK;
+        }
+    }
+}
+
+// Создание дерева
+// L, R - границы (0..N). Корень находится по индексу k = R[L][R].
+Node* buildTreeFromR(int keys[], int weights[], int L, int R_idx) {
+    if (L < R_idx) {
+        int k = R[L][R_idx]; // Индекс корня (в 1-based, 1..N)
+        
+        // В keys и weights данные лежат с 0, поэтому k-1
+        Node* root = createNode(keys[k-1], weights[k-1]);
+        
+        // Рекурсия: (L, k-1) и (k, R) 
+        root->left = buildTreeFromR(keys, weights, L, k - 1);
+        root->right = buildTreeFromR(keys, weights, k, R_idx);
+        
+        return root;
+    }
+    return NULL;
 }
 
 // --- 2. ПРИБЛИЖЕННЫЙ АЛГОРИТМ А1 (Max Weight) ---
@@ -167,11 +196,13 @@ Node* buildA2(int keys[], int weights[], int start, int end) {
     
     // идем пока сумма не станет >= половины
     for (int i = start; i <= end; i++) {
-        currentSum += weights[i];
-        if (currentSum >= totalWeight / 2) { // Порог половины
+        // Условие: сумма ДО элемента меньше половины, 
+        // а сумма С элементом уже больше или равна половине.
+        if (currentSum < (double)totalWeight/2.0 && (currentSum + weights[i]) >= (double)totalWeight/2.0) {
             rootIdx = i;
-            break; 
+            break;
         }
+        currentSum += weights[i];
     }
 
     Node* root = createNode(keys[rootIdx], weights[rootIdx]);
@@ -198,8 +229,10 @@ int main() {
 
     printf("Построение деревьев для N=%d...\n\n", N);
 
+    calculateOptimalBSTMatrix(weights, N);
+
     // 1. Строим ДОП (Эталон)
-    Node* rootOPT = buildOptimalBST(keys, weights, N);
+    Node* rootOPT = buildTreeFromR(keys, weights, 0, N);
 
     // 2. Строим А1
     Node* rootA1 = buildA1(keys, weights, 0, N - 1);

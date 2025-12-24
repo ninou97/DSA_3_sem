@@ -6,30 +6,166 @@ typedef struct Node {
     int data;
     struct Node* left;
     struct Node* right;
-    int height; // Храним высоту узла для балансировки
+    int balance; 
 } Node;
 
-// --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (ДЛЯ АВЛ ЛОГИКИ) ---
-
-int getHeight(Node* n) {
-    if (n == NULL) return 0;
-    return n->height;
-}
-
-int max(int a, int b) {
-    return (a > b) ? a : b;
-}
+// --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
 
 Node* createNode(int data) {
     Node* node = (Node*)malloc(sizeof(Node));
     node->data = data;
     node->left = NULL;
     node->right = NULL;
-    node->height = 1; // Новый узел всегда красный лист высоты 1
+    node->balance = 0; // Новая вершина всегда сбалансирована
     return node;
 }
 
-// --- ФУНКЦИИ СТАТИСТИКИ (Твои стандартные) ---
+
+Node* LL_Rotate(Node* p) {
+    Node* q = p->left;
+    
+    p->balance = 0;
+    q->balance = 0;
+    
+    p->left = q->right;
+    q->right = p;
+    
+    return q; // q становится новым корнем поддерева
+}
+
+Node* RR_Rotate(Node* p) {
+    Node* q = p->right;
+    
+    p->balance = 0;
+    q->balance = 0;
+    
+    p->right = q->left;
+    q->left = p;
+    
+    return q;
+}
+
+Node* LR_Rotate(Node* p) {
+    Node* q = p->left;
+    Node* r = q->right;
+    
+    // Пересчет балансов в зависимости от баланса r
+    if (r->balance < 0) {
+        p->balance = 1;
+    } else {
+        p->balance = 0;
+    }
+    
+    if (r->balance > 0) {
+        q->balance = -1;
+    } else {
+        q->balance = 0;
+    }
+    
+    r->balance = 0;
+    
+    // Переброс указателей
+    q->right = r->left;
+    p->left = r->right;
+    r->left = q;
+    r->right = p;
+    
+    return r;
+}
+
+Node* RL_Rotate(Node* p) {
+    Node* q = p->right;
+    Node* r = q->left;
+    
+    if (r->balance > 0) {
+        p->balance = -1;
+    } else {
+        p->balance = 0;
+    }
+    
+    if (r->balance < 0) {
+        q->balance = 1;
+    } else {
+        q->balance = 0;
+    }
+    
+    r->balance = 0;
+    
+    p->right = r->left;
+    q->left = r->right;
+    r->right = q;
+    r->left = p;
+    
+    return r;
+}
+
+// Используем указатель на grow (Рост), чтобы передавать изменение высоты вверх по рекурсии
+Node* insertAVL_Rec(Node* p, int data, int* grow) {
+    if (p == NULL) {
+        // new(p), p->Data := D ... p->Balance := 0, Рост := ИСТИНА
+        p = createNode(data);
+        *grow = 1; // ИСТИНА
+        return p;
+    }
+
+    if (data < p->data) {
+        // Добавление в левое поддерево
+        p->left = insertAVL_Rec(p->left, data, grow);
+        
+        if (*grow == 1) { // Если выросла левая ветвь
+            if (p->balance > 0) {
+                p->balance = 0;
+                *grow = 0; // ЛОЖЬ
+            }
+            else if (p->balance == 0) {
+                p->balance = -1;
+                *grow = 1; // Рост продолжается
+            }
+            else { // p->balance == -1 (стало -2, нарушение)
+                // Проверка для выбора поворота (LL или LR)
+                if (p->left->balance < 0) {
+                    p = LL_Rotate(p); // <LL - поворот>
+                } else {
+                    p = LR_Rotate(p); // <LR - поворот>
+                }
+                *grow = 0; // Рост := ЛОЖЬ
+            }
+        }
+    }
+    else if (data > p->data) {
+        // Добавление в правое поддерево (аналогичные действия)
+        p->right = insertAVL_Rec(p->right, data, grow);
+        
+        if (*grow == 1) { // Если выросла правая ветвь
+            if (p->balance < 0) {
+                p->balance = 0;
+                *grow = 0;
+            }
+            else if (p->balance == 0) {
+                p->balance = 1;
+                *grow = 1;
+            }
+            else { // p->balance == 1 (стало +2)
+                if (p->right->balance > 0) {
+                    p = RR_Rotate(p); // Используем симметричный LL (RR)
+                } else {
+                    p = RL_Rotate(p); // Используем симметричный LR (RL)
+                }
+                *grow = 0;
+            }
+        }
+    }
+    // Если data == p->data, ничего не делаем (дубликаты игнорируем или обрабатываем отдельно)
+    
+    return p;
+}
+
+Node* insertAVL(Node* root, int data) {
+    int grow = 0;
+    return insertAVL_Rec(root, data, &grow);
+}
+
+// --- ФУНКЦИИ СТАТИСТИКИ ---
 
 // Обход слева направо
 void inorder(Node* root) {
@@ -50,7 +186,6 @@ int checksum(Node* root) {
     return root->data + checksum(root->left) + checksum(root->right);
 }
 
-// Функция вычисления высоты "по факту" (для отчета)
 int calcHeight_Recursive(Node* root) {
     if (!root) return 0;
     int lh = calcHeight_Recursive(root->left);
@@ -73,92 +208,11 @@ double avgDepth(Node* root) {
     return (double)sum / count;
 }
 
-// --- АВЛ БАЛАНСИРОВКА ---
-
-// Правый поворот (вокруг y)
-Node* rightRotate(Node* y) {
-    Node* x = y->left; // x will be new root
-    Node* T2 = x->right; // right branch will go to y
-
-    x->right = y;
-    y->left = T2;
-
-    // refresh heights starting from lower node
-    y->height = max(getHeight(y->left), getHeight(y->right)) + 1;
-    x->height = max(getHeight(x->left), getHeight(x->right)) + 1;
-
-    return x; // Новый корень
-}
-
-// Левый поворот (вокруг x)
-Node* leftRotate(Node* x) {
-    Node* y = x->right;
-    Node* T2 = y->left;
-
-    y->left = x;
-    x->right = T2;
-
-    x->height = max(getHeight(x->left), getHeight(x->right)) + 1;
-    y->height = max(getHeight(y->left), getHeight(y->right)) + 1;
-
-    return y;
-}
-
-// Получение баланса
-int getBalance(Node* N) {
-    if (N == NULL) return 0;
-    return getHeight(N->left) - getHeight(N->right);
-}
-
-// Вставка в АВЛ-дерево
-Node* insertAVL(Node* node, int data) {
-    // 1. Обычная вставка BST
-    if (node == NULL)
-        return createNode(data);
-
-    if (data < node->data)
-        node->left = insertAVL(node->left, data);
-    else if (data > node->data)
-        node->right = insertAVL(node->right, data);
-    else
-        return node; // Дубликаты не нужны
-
-    // 2. Обновляем высоту текущего предка, leafs are 0 height
-    node->height = 1 + max(getHeight(node->left), getHeight(node->right));
-
-    // 3. Проверяем баланс
-    int balance = getBalance(node);
-
-    // 4. Если дисбаланс, есть 4 случая:
-
-    // Left Left Case
-    if (balance > 1 && data < node->left->data)
-        return rightRotate(node);
-
-    // Right Right Case
-    if (balance < -1 && data > node->right->data)
-        return leftRotate(node);
-
-    // Left Right Case
-    if (balance > 1 && data > node->left->data) {
-        node->left = leftRotate(node->left);
-        return rightRotate(node);
-    }
-
-    // Right Left Case
-    if (balance < -1 && data < node->right->data) {
-        node->right = rightRotate(node->right);
-        return leftRotate(node);
-    }
-
-    return node;
-}
-
 // --- ИСДП (Для сравнения) ---
 Node* BuildISDP(int* arr, int start, int end) {
     if (start > end) return NULL;
     int mid = (start + end) / 2;
-    Node* root = createNode(arr[mid]); // createNode ставит height=1, но для ИСДП нам высота не важна
+    Node* root = createNode(arr[mid]); 
     root->left = BuildISDP(arr, start, mid - 1);
     root->right = BuildISDP(arr, mid + 1, end);
     return root;
@@ -227,15 +281,7 @@ int main() {
     // Вывод задания 5*
     printf("\nГрафический вывод АВЛ-дерева (фрагмент):\n");
     PrintTree(rootAVL, 0);
-    printf("\nГрафический вывод АВЛ-дерева (фрагмент):\n");
-
-    int arr1[] = {3, 13, 55, 21, 2, 10, 4};
-    Node* root = NULL;
-
-    for (int i=0; i<7; i++) {
-        root = insertAVL(root, arr1[i]);
-    }
-    PrintTree(root, 0);
+    printf("\nГрафический вывод тестового АВЛ-дерева:\n");
 
     return 0;
 }

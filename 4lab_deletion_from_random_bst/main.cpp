@@ -93,40 +93,64 @@ Node* findMin(Node* root) {
     return root;
 }
 
-// Return new node in place of deleted
-Node* deleteNode(Node* root, int key) {
-    // 1. Если дерево пустое
-    if (root == NULL) return NULL;
+Node* deleteNode(Node* root, int X) {
+    // p := @Root
+    // p хранит адрес указателя, который смотрит на текущий узел.
+    // Сначала это адрес переменной root, потом адреса полей ->left или ->right.
+    Node** p = &root;
 
-    // 2. Ищем узел
-    if (key < root->data) {
-        root->left = deleteNode(root->left, key);
-    } else if (key > root->data) {
-        root->right = deleteNode(root->right, key);
-    } else {
-        // 3. Узел найден (key == root->data). Удаляем его.
-        
-        // Случай А: Нет детей или только один ребенок
-        if (root->left == NULL) {
-            Node* temp = root->right;
-            free(root);
-            return temp;
-        } else if (root->right == NULL) {
-            Node* temp = root->left;
-            free(root);
-            return temp;
+    // DO (*p ≠ NIL)
+    // Ищем узел итеративно
+    while (*p != NULL) {
+        if ((*p)->data < X) {
+            p = &((*p)->right); // p := @((*p)→Right)
+        } else if ((*p)->data > X) {
+            p = &((*p)->left);  // p := @((*p)→Left)
+        } else {
+            break; // Нашли узел, выходим (ELSE OD)
+        }
+    }
+
+    // IF (*p ≠ NIL)
+    if (*p != NULL) {
+        Node* q = *p; // q := *p (Узел, который удаляем)
+
+        // 1. Если нет левого ребенка
+        if (q->left == NULL) {
+            *p = q->right; // *p := q→Right
+        }
+        // 2. Если нет правого ребенка
+        else if (q->right == NULL) {
+            *p = q->left;  // *p := q→Left
+        }
+        // 3. Есть оба ребенка
+        else {
+            Node* r = q->left; // r := q→Left
+            Node* s = q;       // s := q
+
+            
+            if (r->right == NULL) {
+                // Если r сразу максимальный (у него нет правого потомка)
+                r->right = q->right; // 3)
+                *p = r;              // 4)
+            } else {
+                // DO (r→Right ≠ NIL)
+                // Идем в самую правую (большую) вершину левого поддерева
+                while (r->right != NULL) {
+                    s = r;        // s := r
+                    r = r->right; // r := r→Right
+                }
+
+                s->right = r->left;   // 1) Родитель r (s) забирает левый хвост r
+                r->left = q->left;    // 2) r забирает левых детей q
+                r->right = q->right;  // 3) r забирает правых детей q
+                *p = r;               // 4) Родитель q теперь указывает на r
+            }
         }
 
-        // Случай Б: Два ребенка
-        // Берем самого маленького (левого) из правой ветки
-        Node* temp = findMin(root->right);
-
-        // Копируем его данные сюда
-        root->data = temp->data;
-
-        // Рекурсивно удаляем того "дубликата" из правой ветки
-        root->right = deleteNode(root->right, temp->data);
+        free(q); // dispose(q)
     }
+
     return root;
 }
 
