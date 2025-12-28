@@ -161,7 +161,7 @@ Node* buildTreeFromR(int keys[], int weights[], int L, int R_idx) {
 
 // --- 2. ПРИБЛИЖЕННЫЙ АЛГОРИТМ А1 (Max Weight) ---
 // Корнем становится элемент с максимальным весом
-Node* buildA1(int keys[], int weights[], int start, int end) {
+Node* buildA1old(int keys[], int weights[], int start, int end) {
     if (start > end) return NULL;
 
     // Ищем индекс с максимальным весом в диапазоне
@@ -173,9 +173,57 @@ Node* buildA1(int keys[], int weights[], int start, int end) {
     }
 
     Node* root = createNode(keys[maxIdx], weights[maxIdx]);
-    root->left = buildA1(keys, weights, start, maxIdx - 1);
-    root->right = buildA1(keys, weights, maxIdx + 1, end);
+    root->left = buildA1old(keys, weights, start, maxIdx - 1);
+    root->right = buildA1old(keys, weights, maxIdx + 1, end);
     
+    return root;
+}
+
+// Псевдокод "Добавление в СДП" подразумевает обычную вставку в бинарное дерево поиска
+Node* insertSDP(Node* root, int key, int weight) {
+    if (root == NULL) {
+        return createNode(key, weight);
+    }
+    if (key < root->data) {
+        root->left = insertSDP(root->left, key, weight);
+    } else if (key > root->data) {
+        root->right = insertSDP(root->right, key, weight);
+    }
+    return root;
+}
+
+// --- АЛГОРИТМ А1 (Строго по псевдокоду) ---
+Node* buildA1(int keys[], int weights[], int n) {
+    Node* root = NULL;
+    
+    // V.use – логическая переменная... (эмулируем массивом)
+    int* used = (int*)calloc(n, sizeof(int)); // Инициализируем 0 (ЛОЖЬ)
+
+    // DO (i = 1,...,n) - внешний цикл, нужно добавить n вершин
+    for (int i = 0; i < n; i++) {
+        
+        int maxW = -1;
+        int index = -1;
+
+        // DO (j = 1,...,n) - поиск максимума среди неиспользованных
+        for (int j = 0; j < n; j++) {
+            // IF (V[j].w > max и V[j].use = ЛОЖЬ)
+            if (!used[j] && weights[j] > maxW) {
+                maxW = weights[j];
+                index = j;
+            }
+        }
+
+        if (index != -1) {
+            // V[index].use := ИСТИНА
+            used[index] = 1;
+            
+            // Добавление в СДП (Root, V[index])
+            root = insertSDP(root, keys[index], weights[index]);
+        }
+    }
+
+    free(used);
     return root;
 }
 
@@ -235,7 +283,7 @@ int main() {
     Node* rootOPT = buildTreeFromR(keys, weights, 0, N);
 
     // 2. Строим А1
-    Node* rootA1 = buildA1(keys, weights, 0, N - 1);
+    Node* rootA1 = buildA1(keys, weights, N);
 
     // 3. Строим А2
     Node* rootA2 = buildA2(keys, weights, 0, N - 1);
